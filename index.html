@@ -1,0 +1,343 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Mafia! Boom Headshot</title>
+    <link href="/stylesheets/style.css" rel="stylesheet" type="text/css">
+    <link rel="icon" type="image/png" href="favicon-16x16.png" sizes="16x16" />
+  </head>
+  <body>
+    <p id='role'> 8675309 - Your number. Game isn't locked yet </p>
+    <div class = 'divMsg' id = 'msgDiv'>
+      <p> Welcome to Mafia... </p>
+      <p> Type /help to view a list of commands. Message Prakruth on Facebook if you need some help.
+    </div>
+    <form action="">
+      <input id="m" autocomplete="off" /><button>Send</button>
+    </form>
+    <script src="https://cdn.socket.io/socket.io-1.2.0.js"></script>
+    <script src="http://ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
+    <script>
+    var socket = io();
+
+    var updateStat = 0;
+    var playRole = '';
+    var nick = '';
+    var dead = 0;
+    var debate = false;
+    var voting = false;
+    var voted = false;
+    var locked = false;
+
+    //If the player hasn't already been updated, updates their role and the text
+    function updateText(updRole){
+      if (updateStat == 0){
+        document.getElementById('role').innerHTML = '<h1>' + updRole + '</h1>';
+        playRole += updRole;
+        updateStat = 1;
+      }
+    }
+
+    $('form').submit(function(){
+      msg = $('#m').val();
+      //Can't enter nothing
+      if (msg == ''){
+        $('#m').children('input').val('')
+        return false;
+      }
+      if (dead == 1){
+        $('#m').children('input').val('')
+        $('.divMsg').append($('<p>').text("Lol you're dead...."));
+        $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+      }
+      //Checks if message is a /...
+      if (msg.charAt(0) == "/"){
+        newMsg = msg.slice(1).toLocaleLowerCase();
+        arrayMsg = newMsg.split(' ');
+        if (arrayMsg[0] == "help"){
+          $('.divMsg').append($('<p>').text("Here are the commands you can use: /help | /help+ | /setnickname nickname | /nickname | /players | /whoisgod | /pm theirNickname yourMessage | /accuse theirNickname | /vote theirNickname | /accusedlist"));
+          if (playRole == 'god'){
+            $('.divMsg').append($('<p>').text("As god, you can also use: /lock | /mafiafriends | /policefriends | /doctor | /voting."));
+          } else if (playRole == 'mafia'){
+            $('.divMsg').append($('<p>').text("As a member of the mafia, you can also use: /mafiafriends and /mafiakill theirNickname. /mafiakill can only be used once per turn by the mafia, so /pm each other and come to a conclusion of who to kill."));
+          } else if (playRole == 'police'){
+            $('.divMsg').append($('<p>').text("As a member of the police, you can also use: /policefriends and /policeaccuse theirNickname. /policeaccuse can only be used once per turn by the police, so /pm each other and come to a conclusion of who to accuse."));
+          } else if (playRole == 'doctor'){
+            $('.divMsg').append($('<p>').text("As a doctor, you can also use: /doctorheal theirNickname to save a life. /doctorheal can only be used once per turn."));
+          }
+          $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+        } else if (arrayMsg[0] == "help+"){
+          $('.divMsg').append($('<p>').text("Set nickname - /setnickname desiredNickname | Display current nickname - /nickname | Display nicknames of all players - /players | Nickname of god - /whoisgod | Private message - /pm theirNickname yourMessage | Accuse someone during debate mode - /accuse theirNickname | Vote to kick people off the island - /vote theirNickname | View the list of accused people - /accusedlist"));
+          $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+          if (playRole == 'god'){
+            $('.divMsg').append($('<p>').text("Locks players and starts game - /lock | List of mafia members - /mafiafriends | List of police members - /policefriends | Who is the doctor? - /doctor | Allow voting to BURN THE _ITCH (w or b your choice) - /voting."));
+          } else if (playRole == 'mafia'){
+            $('.divMsg').append($('<p>').text("List of mafia members - /mafiafriends | Target someone for extermination - /mafiakill theirNickname. /mafiakill can only be used once per turn by the mafia, so /pm each other and come to a conclusion of who to kill."));
+          } else if (playRole == 'police'){
+            $('.divMsg').append($('<p>').text("List of police members - /policefriends | Investigate a certain individual - /policeaccuse theirNickname. /policeaccuse can only be used once per turn by the police, so /pm each other and come to a conclusion of who to accuse."));
+          } else if (playRole == 'doctor'){
+            $('.divMsg').append($('<p>').text("Heal someone - /doctorheal theirNickname. /doctorheal can only be used once per Doctor Mode."));
+          }
+          $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+        } else if (arrayMsg[0] == "setnickname"){
+          if (arrayMsg.length == 2){
+            socket.emit('set nickname', arrayMsg[1]);
+            $('.divMsg').append($('<p>').text("Okay. It's been set. Check your nickname with /nickname"));
+            $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+          } else {
+            $('.divMsg').append($('<p>').text("Format is: /setnickname desiredNickname. Don't add other crap"));
+            $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+          }
+        } else if (arrayMsg[0] == "nickname"){
+          if (nick != ''){
+            $('.divMsg').append($('<p>').text("Hello " + nick));
+          } else{
+            $('.divMsg').append($('<p>').text("No nickname set. Set one with /setnickname"));
+          }
+          $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+        }  else if (arrayMsg[0] == "players"){
+          socket.emit('player nicks');
+        } else if (arrayMsg[0] == "whoisgod"){
+          socket.emit('who god');
+        } else if (arrayMsg[0] == "pm"){
+          if(arrayMsg.length >= 2){
+            msgArr = arrayMsg.slice(2);
+            messageStr = msgArr.join(' ');
+            socket.emit('private message', arrayMsg[1], messageStr);
+          } else{
+            $('.divMsg').append($('<p>').text("Either no message or no person to send this to"));
+            $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+          }
+        } else if (arrayMsg[0] == "accusedlist"){
+          socket.emit('accused list');
+        } else if (arrayMsg[0] == "lock"){
+          if (playRole == 'god'){
+            socket.emit('game lock');
+          } else {
+            $('.divMsg').append($('<p>').text("lol you can't use this command!"));
+            $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+          }
+        } else if (arrayMsg[0] == "start"){
+          if (playRole == 'god'){
+            socket.emit('game start');
+          } else {
+            $('.divMsg').append($('<p>').text("lol you can't use this command!"));
+            $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+          }
+        } else if (arrayMsg[0] == "voting"){
+          if (playRole == 'god'){
+            socket.emit('voting mode');
+          } else {
+            $('.divMsg').append($('<p>').text("lol you can't use this command!"));
+            $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+          }
+        } else if (arrayMsg[0] == "doctor"){
+          if (playRole == 'god'){
+            socket.emit('who doctor');
+          } else {
+            $('.divMsg').append($('<p>').text("lol you can't use this command!"));
+            $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+          }
+        } else if (arrayMsg[0] == "mafiafriends"){
+          if (playRole == 'mafia' || playRole == 'god'){
+            socket.emit('mafia friends');
+          } else {
+            $('.divMsg').append($('<p>').text("lol you can't use this command!"));
+            $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+          }
+        } else if (arrayMsg[0] == "mafiakill"){
+          if (playRole == 'mafia'){
+            if (arrayMsg.length == 2){
+              socket.emit('mafia kill', arrayMsg[1]);
+            } else {
+              $('.divMsg').append($('<p>').text("Format is: /mafiakill theirNickname. Don't add other crap"));
+              $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+            }
+          } else {
+            $('.divMsg').append($('<p>').text("lol you can't use this command!"));
+            $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+          }
+        } else if (arrayMsg[0] == "policefriends"){
+          if (playRole == 'police' || playRole == 'god'){
+            socket.emit('police friends');
+          } else {
+            $('.divMsg').append($('<p>').text("lol you can't use this command!"));
+            $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+          }
+        } else if (arrayMsg[0] == "policeaccuse"){
+          if (playRole == 'police'){
+            if (arrayMsg.length == 2){
+              socket.emit('police accuse', arrayMsg[1]);
+            } else {
+              $('.divMsg').append($('<p>').text("Format is: /policeaccuse theirNickname. Don't add other crap"));
+              $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+            }
+          } else {
+            $('.divMsg').append($('<p>').text("lol you can't use this command!"));
+            $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+          }
+        } else if (arrayMsg[0] == "doctorheal"){
+          if (playRole == 'doctor'){
+            if (arrayMsg.length == 2){
+              socket.emit('doctor heal', arrayMsg[1]);
+            } else{
+              $('.divMsg').append($('<p>').text("Format is: /doctorheal theirNickname. Don't add other crap"));
+              $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+            }
+          } else {
+            $('.divMsg').append($('<p>').text("lol you can't use this command!"));
+            $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+          }
+        } else if (arrayMsg[0] == "accuse"){
+          if (debate){
+            if (arrayMsg.length == 2){
+              socket.emit('accuse', arrayMsg[1]);
+            } else {
+              $('.divMsg').append($('<p>').text("Format is: /accuse theirNickname. Don't add other crap"));
+              $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+            }
+          } else {
+            $('.divMsg').append($('<p>').text("Not deb8 mode yet m8"));
+            $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+          }
+        } else if (arrayMsg[0] == "vote"){
+          if (voting){
+            if (arrayMsg.length == 2){
+              socket.emit('vote target', arrayMsg[1]);
+            } else {
+              $('.divMsg').append($('<p>').text("Format is: /vote theirNickname. Don't add other crap"));
+              $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+            }
+          } else {
+            $('.divMsg').append($('<p>').text("Not voting mode yet."));
+            $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+          }
+        } else if (arrayMsg[0] == "heyhey"){
+          $('.divMsg').append($('<p class=joke>').text("Guess what?"));
+          $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+        } else if (arrayMsg[0] == "goodnight"){
+          $('.divMsg').append($('<p class=joke>').text("<3"));
+          $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+        } else if (arrayMsg[0] == "ily"){
+          $('.divMsg').append($('<p class=joke>').text("I love you too <3"));
+          $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+        } else if (arrayMsg[0] == "zelda"){
+          $('.divMsg').append($('<p class=joke>').text("TRASH"));
+          $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+        } else if (arrayMsg[0] == "sheik"){
+          $('.divMsg').append($('<p class=joke>').text("3 GUD 5 U"));
+          $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+        } else if (arrayMsg[0] == "l33th4x0r"){
+          $('.divMsg').append($('<p class=joke>').text("Ur a h4xer, Harry"));
+          $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+        } else if (arrayMsg[0] == "deeznuts"){
+          window.open('https://www.youtube.com/watch?v=5LlQNty_C8s', '_blank');
+          $('.divMsg').append($('<p class=joke>').text("ha! got eem"));
+          $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+        } else if (arrayMsg[0] == "seniorchang"){
+          window.open('https://www.youtube.com/watch?v=YaG5SAw1n0c', '_blank');
+          $('.divMsg').append($('<p class=joke>').text("ha gayyyyy!"));
+          $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+        } else if (arrayMsg[0] == "whatteam"){
+          window.open('https://www.youtube.com/watch?v=XXgqqFGIxr0', '_blank');
+          $('.divMsg').append($('<p class=joke>').text("wildcats"));
+          $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+        } else if (arrayMsg[0] == "whattime"){
+          window.open('https://www.youtube.com/watch?v=x42aPmtnVDg', '_blank');
+          $('.divMsg').append($('<p class=joke>').text("summer time"));
+          $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+        } else if (arrayMsg[0] == "uninstall"){
+          $('.divMsg').append($('<p class=joke>').text("Good decision. League drains away your life. Uninstalling is a good idea"));
+          $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+        } else if (arrayMsg[0] == "whatlove"){
+          window.open('https://www.youtube.com/watch?v=6zlViU5PBPY', '_blank');
+          $('.divMsg').append($('<p class=joke>').text("Baby don't hurt me no more"));
+          $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+        } else if (arrayMsg[0] == "1sents"){
+          window.open('https://www.youtube.com/watch?v=xXohtE2SRPg', '_blank');
+          $('.divMsg').append($('<p class=joke>').text("THE VAYNE MECHANICS"));
+          $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+        } else {
+          $('.divMsg').append($('<p>').text("Command " + msg + " is not valid. Type /help if you want to see all the commands and /help+ if you want commands and explanations"));
+          $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+        }
+      } else {
+        //Only god can always chat
+        if (playRole == 'god'){
+          socket.emit('god message', msg);
+          $('#m').val('');
+        } else if (debate) {
+          socket.emit('pleb message', msg);
+          $('#m').val('');
+        } else if (!locked) {
+          socket.emit('prelock message', msg);
+        } else {
+        }
+      }
+      return false;
+      $('#m').children('input').val('');
+    });
+
+    //Socket shenanigans. Displays a message, adds a player when a player enters, and deletes a player when a player leaves
+    socket.on('disp message', function(msg){
+        $('.divMsg').append($('<p>').text(msg));
+        $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+    });
+
+    socket.on('priv message', function(msg){
+      $('.divMsg').append($('<p class=priv>').text(msg));
+      $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+    });
+
+    socket.on('global taunt', function(link){
+      window.open('link', '_blank');
+      $('.divMsg').append($('<p class=joke>').text("LOLOLOLOLOLOLOLOLOLOLOLOL"));
+      $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+    });
+
+    socket.on('accuse message', function(msg){
+      $('.divMsg').append($('<p class=accuse>').text(msg));
+      $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+    });
+
+    socket.on('vote message', function(msg){
+      $('.divMsg').append($('<p class=vote>').text(msg));
+      $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+    });
+
+    socket.on('disp god', function(msg){
+      $('.divMsg').append($('<p>').text("God: " + msg));
+      $('#msgDiv').scrollTop($('#msgDiv').prop("scrollHeight"));
+    });
+
+    socket.on('player enter', function(role){
+      updateText(role);
+    });
+
+    socket.on('player leave', function(role){
+      updateText(role);
+    });
+
+    socket.on('send nickname', function(servNick){
+      nick = '';
+      nick += servNick;
+    });
+
+    socket.on('is dead', function(){
+      dead = 1;
+    });
+
+    socket.on('game locked', function(){
+      locked = true;
+    });
+
+    socket.on('toggle debate', function(toggledDebate){
+      debate = toggledDebate;
+    });
+
+    socket.on('toggle vote', function(toggledVote){
+      voting = toggledVote;
+    });
+
+    </script>
+  </body>
+</html>
