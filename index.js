@@ -3,6 +3,7 @@ var app = express();
 var http = require('http').Server(app);
 var io = require('socket.io')(http);
 
+var playersEntered = 0;
 var playerNum = -1;
 var playersLocked = 0;
 var nicknames = [];
@@ -32,14 +33,16 @@ io.on('connection', function(socket){
   console.log(socket.id);
   if (playersLocked == 0){
     playerNum++;
-    nicknames.push("player"  + playerNum);
+    playersEntered++;
+    nicknames.push("player"  + playersEntered);
     socketIds.push(socket.id);
-    io.emit('disp message', "A player joined the room");
+    if (playerNum == 0){
+      io.sockets.connected[socketIds[0]].emit('player enter', 'god');
+    }
+    sendPM(socket.id, "Your nickname is " + nicknames[socketIds.indexOf(socket.id)]);
+    io.emit('disp message', nicknames[socketIds.indexOf(socket.id)] + " has joined the room");
   } else{
 
-  }
-  if (playerNum == 0){
-    io.sockets.connected[socketIds[0]].emit('player enter', 'god');
   }
 
   socket.on('pleb message', function(msg){
@@ -112,7 +115,7 @@ io.on('connection', function(socket){
     }
   });
 
-  //Nickname stufff
+  //Nickname stuff
   socket.on('player nicks', function(){
     sendPM(socket.id, nicknames.join(', '));
   });
@@ -126,6 +129,7 @@ io.on('connection', function(socket){
       if (arguments.length == 1){
         if(checkName(nick)){
           var socketIndex = socketIds.indexOf(socket.id);
+          io.emit('disp message', nicknames[socketIndex] + " now goes by: " + nick);
           nicknames[socketIndex] = nick;
           console.log(socket.id + "set their nickname to: " + nick);
           io.sockets.connected[socket.id].emit('send nickname', nick);
@@ -145,16 +149,20 @@ io.on('connection', function(socket){
     if (socketIds.indexOf(socket.id) > -1){
       if (arguments.length == 2){
         var ourNick = nicknames[socketIds.indexOf(socket.id)];
-        var theirID = socketIds[nicknames.indexOf(nickname)];
-        var theirInd = nicknames.indexOf(nickname);
+        var theirInd = findPosNickname(nickname);
         if (theirInd > -1){
-          newMessage = ourNick + " says: " + message;
-          sendPM(theirID, newMessage);
-          sendPM(socket.id, newMessage);
+            var theirID = socketIds[theirInd];//
+            newMessage = ourNick + " says: " + message;
+            sendPM(theirID, newMessage);
+            sendPM(socket.id, newMessage);
+        }
+        else{
+            newMessage = nickname + " does not exist";
+            sendPM(socket.id, newMessage);
         }
       }
     } else {
-      sendPM(socket.id, "shadup. You're dead. Stay dead.");
+        sendPM(socket.id, "shadup. You're dead. Stay dead.");
     }
   });
 
@@ -169,7 +177,7 @@ io.on('connection', function(socket){
 
   socket.on('game lock', function(){
     if(checkRole(socket.id, 'god')){
-      if(playerNum > 6 && playersLocked == 0){
+      if(playerNum > 5 && playersLocked == 0){
         console.log('Game is locked');
         playersLocked = 1;
         roleAssignment();
@@ -343,6 +351,9 @@ io.on('connection', function(socket){
     console.log(nicknames[socketIndex] + " has left.");
     socketIds.splice(socketIndex, 1);
     playerRole.splice(socketIndex, 1);
+    if (playerRole.length == 0){
+      playerRole = ['god'];
+    }
     nicknames.splice(socketIndex, 1);
   });
 
@@ -375,12 +386,26 @@ function checkRole(sockId, role){
 }
 
 function checkName(name){
-  for (i = 0; i < nicknames.length; i++){
-    if(nicknames[i] == name){
+    var pos = findPosNickname(name);
+    
+    return (pos == -1);
+  /*for (i = 0; i < nicknames.length; i++){
+    if(nicknames[i].toLocaleLowerCase() == name.toLocaleLowerCase()){
       return false
     }
   }
-  return true;
+  return true; */
+  
+}
+
+//Finds the position using a given nickname
+function findPosNickname(name){
+  for (i = 0; i < nicknames.length; i++){
+    if(nicknames[i].toLocaleLowerCase() == name.toLocaleLowerCase()){
+      return i;
+    }
+  }
+  return -1;
 }
 
 function sendPM(sockId, message){
@@ -420,8 +445,8 @@ function getMaxOfArray(numArray) {
 
 function roleAssignment(){
   console.log("Assigning roles");
-  if(playerNum == 7){
-    playerRole = playerRole.concat(shuffle(['mafia', 'police', 'doctor', 'civilian', 'civilian', 'civilian']));
+  if(playerNum == 6){
+    playerRole = playerRole.concat(shuffle(['mafia', 'police', 'doctor', 'mafia', 'civilian', 'civilian']));
   } else {
     var playing = playerNum - 2;
     var roleArray = ['mafia', 'police', 'civilian', 'civilian'];
